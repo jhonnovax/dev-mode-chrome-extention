@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Dev Mode",
+  "version": "1.0.0",
+  "description": "Toggle DEV mode cookies and proxy settings",
+  "permissions": [
+    "cookies",
+    "scripting",
+    "proxy"
+  ],
+  "host_permissions": [
+    "*://*.on24.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Dev Mode"
+  }
+}
