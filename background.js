@@ -255,9 +255,11 @@ async function setState(newState) {
   await saveState(newState);
   await applyStateConfig(newState);
 
-  // Reload matching tabs
-  const tabs = await chrome.tabs.query({});
-  tabs.forEach(tab => reloadIfMatchingDomain(tab));
+  // Reload the current active tab if it matches the domain
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (activeTab) {
+    reloadIfMatchingDomain(activeTab);
+  }
 }
 
 // Event Listeners
