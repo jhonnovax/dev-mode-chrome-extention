@@ -24,23 +24,29 @@ const STATE_CONFIG = {
     label: 'DEV',
     title: 'Development Mode',
     cookie: true,          // Cookie is SET
-    proxy: 'system'
+    proxy: 'system',
+    disableCache: true     // Cache disabled
   },
   [STATES.PROD]: {
     color: '#D32F2F',      // Red
     label: 'PRO',
     title: 'Production Mode',
     cookie: false,         // Cookie deleted
-    proxy: 'system'
+    proxy: 'system',
+    disableCache: true     // Cache disabled
   },
   [STATES.OFF]: {
     color: '#757575',      // Gray
     label: 'OFF',
     title: 'Off',
     cookie: false,         // Cookie deleted
-    proxy: 'direct'
+    proxy: 'direct',
+    disableCache: false    // Cache enabled (normal)
   }
 };
+
+// Rule ID for cache-disabling
+const CACHE_RULE_ID = 1;
 
 /**
  * Generate an accessible badge icon using OffscreenCanvas
@@ -159,6 +165,41 @@ async function setProxy(mode) {
 }
 
 /**
+ * Enable cache bypass by adding request headers
+ */
+async function enableCacheBypass() {
+  const rule = {
+    id: CACHE_RULE_ID,
+    priority: 1,
+    action: {
+      type: 'modifyHeaders',
+      requestHeaders: [
+        { header: 'Cache-Control', operation: 'set', value: 'no-cache, no-store, must-revalidate' },
+        { header: 'Pragma', operation: 'set', value: 'no-cache' }
+      ]
+    },
+    condition: {
+      urlFilter: '*://*.on24.com/*',
+      resourceTypes: ['main_frame', 'sub_frame', 'stylesheet', 'script', 'image', 'font', 'xmlhttprequest', 'other']
+    }
+  };
+
+  await chrome.declarativeNetRequest.updateDynamicRules({
+    removeRuleIds: [CACHE_RULE_ID],
+    addRules: [rule]
+  });
+}
+
+/**
+ * Disable cache bypass by removing the rule
+ */
+async function disableCacheBypass() {
+  await chrome.declarativeNetRequest.updateDynamicRules({
+    removeRuleIds: [CACHE_RULE_ID]
+  });
+}
+
+/**
  * Apply the configuration for a given state
  * @param {string} state - State to apply
  */
@@ -174,6 +215,13 @@ async function applyStateConfig(state) {
 
   // Handle proxy
   await setProxy(config.proxy);
+
+  // Handle cache
+  if (config.disableCache) {
+    await enableCacheBypass();
+  } else {
+    await disableCacheBypass();
+  }
 
   // Update icon
   await updateIcon(state);

@@ -41,11 +41,11 @@ No build step required. This is a plain JavaScript extension.
 - Extension initializes on install, startup, and immediately to ensure state persistence
 
 **States:**
-| State | Icon | Label | Cookie | Proxy |
-|-------|------|-------|--------|-------|
-| DEV   | Green (#00C853) | DEV | SET (`htm-dev-mode=4815162342`) | system |
-| PROD  | Red (#D32F2F) | PRO | deleted | system |
-| OFF   | Gray (#757575) | OFF | deleted | direct |
+| State | Icon | Label | Cookie | Proxy | Cache |
+|-------|------|-------|--------|-------|-------|
+| DEV   | Green (#00C853) | DEV | SET (`htm-dev-mode=4815162342`) | system | disabled |
+| PROD  | Red (#D32F2F) | PRO | deleted | system | disabled |
+| OFF   | Gray (#757575) | OFF | deleted | direct | enabled |
 
 **UI Features:**
 - Dark theme popup with animated menu items
