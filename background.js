@@ -22,28 +22,25 @@ const STATE_CONFIG = {
   [STATES.DEV]: {
     color: '#00C853',      // Green
     label: 'DEV',
-    title: 'Dev Mode (Click for Prod)',
+    title: 'Development Mode',
     cookie: true,          // Cookie is SET
     proxy: 'system'
   },
   [STATES.PROD]: {
     color: '#D32F2F',      // Red
     label: 'PRO',
-    title: 'Prod Mode (Click for Off)',
+    title: 'Production Mode',
     cookie: false,         // Cookie deleted
     proxy: 'system'
   },
   [STATES.OFF]: {
     color: '#757575',      // Gray
     label: 'OFF',
-    title: 'Off (Click for Dev)',
+    title: 'Off',
     cookie: false,         // Cookie deleted
     proxy: 'direct'
   }
 };
-
-// State cycle order
-const STATE_CYCLE = [STATES.DEV, STATES.PROD, STATES.OFF];
 
 /**
  * Generate an accessible badge icon using OffscreenCanvas
@@ -103,17 +100,6 @@ async function getCurrentState() {
  */
 async function saveState(state) {
   await chrome.storage.local.set({ extensionState: state });
-}
-
-/**
- * Get the next state in the cycle
- * @param {string} currentState - Current state
- * @returns {string} - Next state
- */
-function getNextState(currentState) {
-  const currentIndex = STATE_CYCLE.indexOf(currentState);
-  const nextIndex = (currentIndex + 1) % STATE_CYCLE.length;
-  return STATE_CYCLE[nextIndex];
 }
 
 /**
@@ -204,19 +190,6 @@ function reloadIfMatchingDomain(tab) {
 }
 
 /**
- * Cycle to the next state
- * @param {chrome.tabs.Tab} tab - The tab that triggered the action
- */
-async function cycleState(tab) {
-  const currentState = await getCurrentState();
-  const nextState = getNextState(currentState);
-
-  await saveState(nextState);
-  await applyStateConfig(nextState);
-  reloadIfMatchingDomain(tab);
-}
-
-/**
  * Initialize extension state
  */
 async function initialize() {
@@ -224,10 +197,30 @@ async function initialize() {
   await applyStateConfig(state);
 }
 
+/**
+ * Handle state change request from popup
+ * @param {string} newState - The state to switch to
+ */
+async function setState(newState) {
+  if (!STATE_CONFIG[newState]) return;
+
+  await saveState(newState);
+  await applyStateConfig(newState);
+
+  // Reload matching tabs
+  const tabs = await chrome.tabs.query({});
+  tabs.forEach(tab => reloadIfMatchingDomain(tab));
+}
+
 // Event Listeners
 
-// Handle extension icon click
-chrome.action.onClicked.addListener(cycleState);
+// Handle messages from popup
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message.action === 'setState') {
+    setState(message.state).then(() => sendResponse({ success: true }));
+    return true; // Keep channel open for async response
+  }
+});
 
 // Initialize on install or update
 chrome.runtime.onInstalled.addListener(initialize);

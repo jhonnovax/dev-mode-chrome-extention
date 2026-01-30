@@ -18,32 +18,37 @@ No build step required. This is a plain JavaScript extension.
 
 ## Architecture
 
-**background.js** - Service worker containing all extension logic:
-- Listens for extension icon clicks to toggle dev mode
+**background.js** - Service worker containing extension logic:
+- Manages three states: DEV, PROD, OFF
 - Sets/removes cookie `htm-dev-mode=4815162342` on `.on24.com`
 - Switches proxy between system and direct modes
-- Generates dynamic "DEV" badge icon (green=ON, red=OFF) using OffscreenCanvas
-- Auto-reloads tabs on matching domains when toggled
+- Generates dynamic badge icons using OffscreenCanvas
+- Auto-reloads tabs on matching domains when state changes
+
+**popup.html / popup.js** - Dropdown menu UI:
+- Styled dark theme dropdown with three options
+- Animated entry and click ripple effects
+- Communicates with background.js via chrome.runtime.sendMessage
 
 **manifest.json** - Extension configuration (Manifest V3):
-- Permissions: `cookies`, `scripting`, `proxy`
+- Permissions: `cookies`, `scripting`, `proxy`, `storage`
 - Host permissions restricted to `*://*.on24.com/*`
 
 ## Key Implementation Details
 
-- Three-state cycle: DEV → PROD → OFF → DEV (click to cycle)
+- Click icon to open dropdown menu with three options
 - State is persisted in chrome.storage.local
 - Extension initializes on install, startup, and immediately to ensure state persistence
 
 **States:**
-| State | Icon | Cookie | Proxy |
-|-------|------|--------|-------|
-| DEV   | Green (#00C853) | SET (`htm-dev-mode=4815162342`) | system |
-| PROD  | Red (#D32F2F) | deleted | system |
-| OFF   | Gray (#757575) | deleted | direct |
+| State | Icon | Label | Cookie | Proxy |
+|-------|------|-------|--------|-------|
+| DEV   | Green (#00C853) | DEV | SET (`htm-dev-mode=4815162342`) | system |
+| PROD  | Red (#D32F2F) | PRO | deleted | system |
+| OFF   | Gray (#757575) | OFF | deleted | direct |
 
-**Accessibility features:**
-- High contrast colors with white text
-- Text shadow for readability
-- Subtle border for icon visibility
-- Tooltip shows current state and next action
+**UI Features:**
+- Dark theme popup with animated menu items
+- Click ripple effect on selection
+- Active state indicator (glowing dot + border)
+- Slide-in animation on open

@@ -16,6 +16,7 @@
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "Dev Mode"
+    "default_title": "Dev Mode",
+    "default_popup": "popup.html"
   }
 }
