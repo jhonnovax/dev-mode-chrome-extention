@@ -31,6 +31,19 @@ No build step required. This is a plain JavaScript extension.
 
 ## Key Implementation Details
 
-- Cookie and proxy state are always modified together for consistency
+- Three-state cycle: DEV → PROD → OFF → DEV (click to cycle)
+- State is persisted in chrome.storage.local
 - Extension initializes on install, startup, and immediately to ensure state persistence
-- Icon color indicates current state: `#00C853` (green) = ON, `#FF3D00` (red) = OFF
+
+**States:**
+| State | Icon | Cookie | Proxy |
+|-------|------|--------|-------|
+| DEV   | Green (#00C853) | SET (`htm-dev-mode=4815162342`) | system |
+| PROD  | Red (#D32F2F) | deleted | system |
+| OFF   | Gray (#757575) | deleted | direct |
+
+**Accessibility features:**
+- High contrast colors with white text
+- Text shadow for readability
+- Subtle border for icon visibility
+- Tooltip shows current state and next action

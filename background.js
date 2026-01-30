@@ -8,19 +8,50 @@ const COOKIE_CONFIG = {
   sameSite: 'no_restriction'
 };
 
-const DOMAIN_PATTERN = '*://*.on24.com/*';
 const COOKIE_URL = 'https://on24.com';
 
-// Colors for icon states
-const COLOR_ON = '#00C853';  // Green - Dev Mode ON
-const COLOR_OFF = '#FF3D00'; // Red - Dev Mode OFF
+// Three states: dev, prod, off
+const STATES = {
+  DEV: 'dev',
+  PROD: 'prod',
+  OFF: 'off'
+};
+
+// State configurations
+const STATE_CONFIG = {
+  [STATES.DEV]: {
+    color: '#00C853',      // Green
+    label: 'DEV',
+    title: 'Dev Mode (Click for Prod)',
+    cookie: true,          // Cookie is SET
+    proxy: 'system'
+  },
+  [STATES.PROD]: {
+    color: '#D32F2F',      // Red
+    label: 'PRO',
+    title: 'Prod Mode (Click for Off)',
+    cookie: false,         // Cookie deleted
+    proxy: 'system'
+  },
+  [STATES.OFF]: {
+    color: '#757575',      // Gray
+    label: 'OFF',
+    title: 'Off (Click for Dev)',
+    cookie: false,         // Cookie deleted
+    proxy: 'direct'
+  }
+};
+
+// State cycle order
+const STATE_CYCLE = [STATES.DEV, STATES.PROD, STATES.OFF];
 
 /**
- * Generate a DEV badge icon using OffscreenCanvas
+ * Generate an accessible badge icon using OffscreenCanvas
  * @param {string} color - The fill color for the badge
+ * @param {string} label - The text label to display
  * @returns {ImageData} - The icon image data
  */
-function generateDevIcon(color) {
+function generateIcon(color, label) {
   const size = 32;
   const canvas = new OffscreenCanvas(size, size);
   const ctx = canvas.getContext('2d');
@@ -28,63 +59,77 @@ function generateDevIcon(color) {
   // Clear canvas
   ctx.clearRect(0, 0, size, size);
 
-  // Draw rounded square background - fill entire canvas
+  // Draw rounded rectangle background
   const radius = 4;
   ctx.beginPath();
   ctx.roundRect(0, 0, size, size, radius);
   ctx.fillStyle = color;
   ctx.fill();
 
-  // Draw "DEV" text - larger and bolder
+  // Add subtle border for better visibility
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Draw text with shadow for better readability
   ctx.fillStyle = '#FFFFFF';
-  ctx.font = '900 13px Arial, sans-serif';
+  ctx.font = 'bold 11px Arial, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('DEV', size / 2, size / 2 + 1);
+
+  // Text shadow for accessibility
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+  ctx.shadowBlur = 2;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 1;
+
+  ctx.fillText(label, size / 2, size / 2 + 1);
 
   return ctx.getImageData(0, 0, size, size);
 }
 
 /**
- * Adjust color brightness
- * @param {string} hex - Hex color string
- * @param {number} amount - Amount to adjust (-255 to 255)
- * @returns {string} - Adjusted hex color
+ * Get the current state from storage
+ * @returns {Promise<string>} - Current state
  */
-function adjustBrightness(hex, amount) {
-  const num = parseInt(hex.replace('#', ''), 16);
-  const r = Math.max(0, Math.min(255, ((num >> 16) & 0xff) + amount));
-  const g = Math.max(0, Math.min(255, ((num >> 8) & 0xff) + amount));
-  const b = Math.max(0, Math.min(255, (num & 0xff) + amount));
-  return `rgb(${r}, ${g}, ${b})`;
+async function getCurrentState() {
+  const result = await chrome.storage.local.get('extensionState');
+  return result.extensionState || STATES.OFF;
 }
 
 /**
- * Check if the dev mode cookie exists
- * @returns {Promise<boolean>}
+ * Save the current state to storage
+ * @param {string} state - State to save
  */
-async function isCookiePresent() {
-  const cookie = await chrome.cookies.get({
-    url: COOKIE_URL,
-    name: COOKIE_CONFIG.name
-  });
-  return cookie !== null;
+async function saveState(state) {
+  await chrome.storage.local.set({ extensionState: state });
 }
 
 /**
- * Set the extension icon based on cookie state
- * @param {boolean} isOn - Whether dev mode is on
+ * Get the next state in the cycle
+ * @param {string} currentState - Current state
+ * @returns {string} - Next state
  */
-async function updateIcon(isOn) {
-  const color = isOn ? COLOR_ON : COLOR_OFF;
-  const imageData = generateDevIcon(color);
+function getNextState(currentState) {
+  const currentIndex = STATE_CYCLE.indexOf(currentState);
+  const nextIndex = (currentIndex + 1) % STATE_CYCLE.length;
+  return STATE_CYCLE[nextIndex];
+}
+
+/**
+ * Set the extension icon based on state
+ * @param {string} state - Current state
+ */
+async function updateIcon(state) {
+  const config = STATE_CONFIG[state];
+  const imageData = generateIcon(config.color, config.label);
 
   await chrome.action.setIcon({
     imageData: { 32: imageData }
   });
 
   await chrome.action.setTitle({
-    title: isOn ? 'Dev Mode: ON (Click to disable)' : 'Dev Mode: OFF (Click to enable)'
+    title: config.title
   });
 }
 
@@ -117,23 +162,35 @@ async function removeCookie() {
 }
 
 /**
- * Set proxy mode to system (uses system proxy settings)
+ * Set proxy mode
+ * @param {string} mode - 'system' or 'direct'
  */
-async function setProxyToSystem() {
+async function setProxy(mode) {
   await chrome.proxy.settings.set({
-    value: { mode: 'system' },
+    value: { mode },
     scope: 'regular'
   });
 }
 
 /**
- * Set proxy mode to direct (no proxy)
+ * Apply the configuration for a given state
+ * @param {string} state - State to apply
  */
-async function setProxyToDirect() {
-  await chrome.proxy.settings.set({
-    value: { mode: 'direct' },
-    scope: 'regular'
-  });
+async function applyStateConfig(state) {
+  const config = STATE_CONFIG[state];
+
+  // Handle cookie
+  if (config.cookie) {
+    await setCookie();
+  } else {
+    await removeCookie();
+  }
+
+  // Handle proxy
+  await setProxy(config.proxy);
+
+  // Update icon
+  await updateIcon(state);
 }
 
 /**
@@ -141,28 +198,21 @@ async function setProxyToDirect() {
  * @param {chrome.tabs.Tab} tab - The tab to potentially reload
  */
 function reloadIfMatchingDomain(tab) {
-  if (tab.url && tab.url.includes(COOKIE_CONFIG.domain)) {
+  if (tab.url && tab.url.includes(COOKIE_CONFIG.domain.replace('.', ''))) {
     chrome.tabs.reload(tab.id);
   }
 }
 
 /**
- * Toggle the cookie state and proxy mode
+ * Cycle to the next state
  * @param {chrome.tabs.Tab} tab - The tab that triggered the action
  */
-async function toggleCookie(tab) {
-  const isCurrentlyOn = await isCookiePresent();
+async function cycleState(tab) {
+  const currentState = await getCurrentState();
+  const nextState = getNextState(currentState);
 
-  if (isCurrentlyOn) {
-    await removeCookie();
-    await setProxyToDirect();
-  } else {
-    await setCookie();
-    await setProxyToSystem();
-  }
-
-  const newState = !isCurrentlyOn;
-  await updateIcon(newState);
+  await saveState(nextState);
+  await applyStateConfig(nextState);
   reloadIfMatchingDomain(tab);
 }
 
@@ -170,20 +220,14 @@ async function toggleCookie(tab) {
  * Initialize extension state
  */
 async function initialize() {
-  const isOn = await isCookiePresent();
-  await updateIcon(isOn);
-
-  if (isOn) {
-    await setProxyToSystem();
-  } else {
-    await setProxyToDirect();
-  }
+  const state = await getCurrentState();
+  await applyStateConfig(state);
 }
 
 // Event Listeners
 
 // Handle extension icon click
-chrome.action.onClicked.addListener(toggleCookie);
+chrome.action.onClicked.addListener(cycleState);
 
 // Initialize on install or update
 chrome.runtime.onInstalled.addListener(initialize);

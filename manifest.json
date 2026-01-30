@@ -6,7 +6,8 @@
   "permissions": [
     "cookies",
     "scripting",
-    "proxy"
+    "proxy",
+    "storage"
   ],
   "host_permissions": [
     "*://*.on24.com/*"
