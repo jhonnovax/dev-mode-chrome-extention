@@ -2,13 +2,10 @@
 const COOKIE_CONFIG = {
   name: 'htm-dev-mode',
   value: '4815162342',
-  domain: '.on24.com',
   path: '/',
   secure: true,
   sameSite: 'no_restriction'
 };
-
-const COOKIE_URL = 'https://on24.com';
 
 // Three states: dev, prod, off
 const STATES = {
@@ -126,16 +123,37 @@ async function updateIcon(state) {
 }
 
 /**
- * Set the dev mode cookie
+ * Extract the root domain from a URL (e.g., "https://www.example.com/path" -> ".example.com")
+ * @param {string} url - The URL to extract domain from
+ * @returns {string|null} - The root domain with leading dot, or null if invalid
  */
-async function setCookie() {
+function extractDomain(url) {
+  try {
+    const hostname = new URL(url).hostname;
+    const parts = hostname.split('.');
+    if (parts.length >= 2) {
+      // Get root domain (last two parts, e.g., "example.com")
+      return '.' + parts.slice(-2).join('.');
+    }
+    return '.' + hostname;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Set the dev mode cookie for the given domain
+ * @param {string} domain - The domain to set the cookie on (e.g., ".example.com")
+ * @param {string} url - The URL to use for setting the cookie
+ */
+async function setCookie(domain, url) {
   const oneYearFromNow = Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60);
 
   await chrome.cookies.set({
-    url: COOKIE_URL,
+    url: url,
     name: COOKIE_CONFIG.name,
     value: COOKIE_CONFIG.value,
-    domain: COOKIE_CONFIG.domain,
+    domain: domain,
     path: COOKIE_CONFIG.path,
     secure: COOKIE_CONFIG.secure,
     sameSite: COOKIE_CONFIG.sameSite,
@@ -144,11 +162,12 @@ async function setCookie() {
 }
 
 /**
- * Remove the dev mode cookie
+ * Remove the dev mode cookie for the given domain
+ * @param {string} url - The URL to use for removing the cookie
  */
-async function removeCookie() {
+async function removeCookie(url) {
   await chrome.cookies.remove({
-    url: COOKIE_URL,
+    url: url,
     name: COOKIE_CONFIG.name
   });
 }
@@ -179,7 +198,7 @@ async function enableCacheBypass() {
       ]
     },
     condition: {
-      urlFilter: '*://*.on24.com/*',
+      urlFilter: '*',
       resourceTypes: ['main_frame', 'sub_frame', 'stylesheet', 'script', 'image', 'font', 'xmlhttprequest', 'other']
     }
   };
@@ -202,15 +221,21 @@ async function disableCacheBypass() {
 /**
  * Apply the configuration for a given state
  * @param {string} state - State to apply
+ * @param {chrome.tabs.Tab} [tab] - Optional tab to use for cookie domain
  */
-async function applyStateConfig(state) {
+async function applyStateConfig(state, tab) {
   const config = STATE_CONFIG[state];
 
-  // Handle cookie
-  if (config.cookie) {
-    await setCookie();
-  } else {
-    await removeCookie();
+  // Handle cookie based on the current tab's domain
+  if (tab && tab.url) {
+    const domain = extractDomain(tab.url);
+    if (domain) {
+      if (config.cookie) {
+        await setCookie(domain, tab.url);
+      } else {
+        await removeCookie(tab.url);
+      }
+    }
   }
 
   // Handle proxy
@@ -225,16 +250,6 @@ async function applyStateConfig(state) {
 
   // Update icon
   await updateIcon(state);
-}
-
-/**
- * Reload the current tab if it matches the cookie domain
- * @param {chrome.tabs.Tab} tab - The tab to potentially reload
- */
-function reloadIfMatchingDomain(tab) {
-  if (tab.url && tab.url.includes(COOKIE_CONFIG.domain.replace('.', ''))) {
-    chrome.tabs.reload(tab.id);
-  }
 }
 
 /**
@@ -253,12 +268,14 @@ async function setState(newState) {
   if (!STATE_CONFIG[newState]) return;
 
   await saveState(newState);
-  await applyStateConfig(newState);
 
-  // Reload the current active tab if it matches the domain
+  // Get the current active tab for cookie domain
   const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  await applyStateConfig(newState, activeTab);
+
+  // Reload the active tab after state change
   if (activeTab) {
-    reloadIfMatchingDomain(activeTab);
+    chrome.tabs.reload(activeTab.id);
   }
 }
 

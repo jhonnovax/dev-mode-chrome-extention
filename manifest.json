@@ -8,10 +8,11 @@
     "scripting",
     "proxy",
     "storage",
-    "declarativeNetRequest"
+    "declarativeNetRequest",
+    "tabs"
   ],
   "host_permissions": [
-    "*://*.on24.com/*"
+    "<all_urls>"
   ],
   "background": {
     "service_worker": "background.js"
