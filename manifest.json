@@ -7,7 +7,6 @@
     "cookies",
     "scripting",
     "proxy",
-    "storage",
     "declarativeNetRequest",
     "tabs"
   ],

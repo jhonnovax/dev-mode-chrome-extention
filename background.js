@@ -45,6 +45,9 @@ const STATE_CONFIG = {
 // Rule ID for cache-disabling
 const CACHE_RULE_ID = 1;
 
+// Store state per domain
+const domainStates = new Map();
+
 /**
  * Generate an accessible badge icon using OffscreenCanvas
  * @param {string} color - The fill color for the badge
@@ -89,20 +92,33 @@ function generateIcon(color, label) {
 }
 
 /**
- * Get the current state from storage
- * @returns {Promise<string>} - Current state
+ * Get the state for a domain from the Map
+ * @param {string} domain - The domain to get state for
+ * @returns {string} - The state or OFF if not set
  */
-async function getCurrentState() {
-  const result = await chrome.storage.local.get('extensionState');
-  return result.extensionState || STATES.OFF;
+function getStateForDomain(domain) {
+  return domainStates.get(domain) || STATES.OFF;
 }
 
 /**
- * Save the current state to storage
- * @param {string} state - State to save
+ * Set the state for a domain in the Map
+ * @param {string} domain - The domain to set state for
+ * @param {string} state - The state to set
  */
-async function saveState(state) {
-  await chrome.storage.local.set({ extensionState: state });
+function setStateForDomain(domain, state) {
+  domainStates.set(domain, state);
+}
+
+/**
+ * Get the state for a tab based on its domain
+ * @param {chrome.tabs.Tab} [tab] - The tab to get state for
+ * @returns {string} - The state or OFF if no valid domain
+ */
+function getStateForTab(tab) {
+  if (!tab?.url) return STATES.OFF;
+  const domain = extractDomain(tab.url);
+  if (!domain) return STATES.OFF;
+  return getStateForDomain(domain);
 }
 
 /**
@@ -253,11 +269,12 @@ async function applyStateConfig(state, tab) {
 }
 
 /**
- * Initialize extension state
+ * Initialize extension - just update icon for current tab
  */
 async function initialize() {
-  const state = await getCurrentState();
-  await applyStateConfig(state);
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const state = getStateForTab(activeTab);
+  await updateIcon(state);
 }
 
 /**
@@ -267,10 +284,17 @@ async function initialize() {
 async function setState(newState) {
   if (!STATE_CONFIG[newState]) return;
 
-  await saveState(newState);
-
   // Get the current active tab for cookie domain
   const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+  if (activeTab?.url) {
+    const domain = extractDomain(activeTab.url);
+    if (domain) {
+      // Save state for this domain
+      setStateForDomain(domain, newState);
+    }
+  }
+
   await applyStateConfig(newState, activeTab);
 
   // Reload the active tab after state change
@@ -286,6 +310,28 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.action === 'setState') {
     setState(message.state).then(() => sendResponse({ success: true }));
     return true; // Keep channel open for async response
+  }
+  if (message.action === 'getState') {
+    chrome.tabs.query({ active: true, currentWindow: true }).then(([activeTab]) => {
+      const state = getStateForTab(activeTab);
+      sendResponse({ state });
+    });
+    return true; // Keep channel open for async response
+  }
+});
+
+// Update icon and apply config when tab is activated (user switches tabs)
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  const tab = await chrome.tabs.get(activeInfo.tabId);
+  const state = getStateForTab(tab);
+  await applyStateConfig(state, tab);
+});
+
+// Update icon and apply config when tab URL changes (navigation)
+chrome.tabs.onUpdated.addListener(async (_tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'complete' && tab.active) {
+    const state = getStateForTab(tab);
+    await applyStateConfig(state, tab);
   }
 });
 

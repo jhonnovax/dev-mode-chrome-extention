@@ -1,7 +1,7 @@
 // Get current state and update UI
 async function updateUI() {
-  const result = await chrome.storage.local.get('extensionState');
-  const currentState = result.extensionState || 'off';
+  const response = await chrome.runtime.sendMessage({ action: 'getState' });
+  const currentState = response?.state || 'off';
 
   document.querySelectorAll('.menu-item').forEach(item => {
     item.classList.toggle('active', item.dataset.state === currentState);
