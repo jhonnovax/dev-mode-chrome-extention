@@ -8,7 +8,9 @@
     "scripting",
     "proxy",
     "declarativeNetRequest",
-    "tabs"
+    "tabs",
+    "webNavigation",
+    "storage"
   ],
   "host_permissions": [
     "<all_urls>"

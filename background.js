@@ -45,8 +45,11 @@ const STATE_CONFIG = {
 // Rule ID for cache-disabling
 const CACHE_RULE_ID = 1;
 
-// Store state per domain
-const domainStates = new Map();
+// Storage key for domain states
+const DOMAIN_STATES_KEY = 'domainStates';
+
+// Track navigations we've already handled (tabId:url -> timestamp)
+const handledNavigations = new Map();
 
 /**
  * Generate an accessible badge icon using OffscreenCanvas
@@ -92,33 +95,45 @@ function generateIcon(color, label) {
 }
 
 /**
- * Get the state for a domain from the Map
- * @param {string} domain - The domain to get state for
- * @returns {string} - The state or OFF if not set
+ * Get all domain states from storage
+ * @returns {Promise<Object>} - Object with domain -> state mappings
  */
-function getStateForDomain(domain) {
-  return domainStates.get(domain) || STATES.OFF;
+async function getDomainStates() {
+  const result = await chrome.storage.local.get(DOMAIN_STATES_KEY);
+  return result[DOMAIN_STATES_KEY] || {};
 }
 
 /**
- * Set the state for a domain in the Map
+ * Get the state for a domain from storage
+ * @param {string} domain - The domain to get state for
+ * @returns {Promise<string>} - The state or OFF if not set
+ */
+async function getStateForDomain(domain) {
+  const states = await getDomainStates();
+  return states[domain] || STATES.OFF;
+}
+
+/**
+ * Set the state for a domain in storage
  * @param {string} domain - The domain to set state for
  * @param {string} state - The state to set
  */
-function setStateForDomain(domain, state) {
-  domainStates.set(domain, state);
+async function setStateForDomain(domain, state) {
+  const states = await getDomainStates();
+  states[domain] = state;
+  await chrome.storage.local.set({ [DOMAIN_STATES_KEY]: states });
 }
 
 /**
  * Get the state for a tab based on its domain
  * @param {chrome.tabs.Tab} [tab] - The tab to get state for
- * @returns {string} - The state or OFF if no valid domain
+ * @returns {Promise<string>} - The state or OFF if no valid domain
  */
-function getStateForTab(tab) {
+async function getStateForTab(tab) {
   if (!tab?.url) return STATES.OFF;
   const domain = extractDomain(tab.url);
   if (!domain) return STATES.OFF;
-  return getStateForDomain(domain);
+  return await getStateForDomain(domain);
 }
 
 /**
@@ -273,7 +288,7 @@ async function applyStateConfig(state, tab) {
  */
 async function initialize() {
   const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  const state = getStateForTab(activeTab);
+  const state = await getStateForTab(activeTab);
   await updateIcon(state);
 }
 
@@ -291,8 +306,12 @@ async function setState(newState) {
     const domain = extractDomain(activeTab.url);
     if (domain) {
       // Save state for this domain
-      setStateForDomain(domain, newState);
+      await setStateForDomain(domain, newState);
     }
+
+    // Mark this navigation as handled so onCompleted doesn't reload again
+    const navKey = `${activeTab.id}:${activeTab.url}`;
+    handledNavigations.set(navKey, Date.now());
   }
 
   await applyStateConfig(newState, activeTab);
@@ -312,26 +331,88 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true; // Keep channel open for async response
   }
   if (message.action === 'getState') {
-    chrome.tabs.query({ active: true, currentWindow: true }).then(([activeTab]) => {
-      const state = getStateForTab(activeTab);
+    chrome.tabs.query({ active: true, currentWindow: true }).then(async ([activeTab]) => {
+      const state = await getStateForTab(activeTab);
       sendResponse({ state });
     });
     return true; // Keep channel open for async response
   }
 });
 
-// Update icon and apply config when tab is activated (user switches tabs)
-chrome.tabs.onActivated.addListener(async (activeInfo) => {
-  const tab = await chrome.tabs.get(activeInfo.tabId);
-  const state = getStateForTab(tab);
-  await applyStateConfig(state, tab);
+// Apply config BEFORE navigation starts
+chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
+  // Only handle main frame navigations
+  if (details.frameId !== 0) return;
+
+  const domain = extractDomain(details.url);
+  if (!domain) return;
+
+  const state = await getStateForDomain(domain);
+  const config = STATE_CONFIG[state];
+
+  // Apply cookie
+  if (config.cookie) {
+    await setCookie(domain, details.url);
+  } else {
+    try {
+      await removeCookie(details.url);
+    } catch {
+      // Cookie may not exist
+    }
+  }
+
+  // Apply proxy and cache
+  await setProxy(config.proxy);
+  if (config.disableCache) {
+    await enableCacheBypass();
+  } else {
+    await disableCacheBypass();
+  }
 });
 
-// Update icon and apply config when tab URL changes (navigation)
-chrome.tabs.onUpdated.addListener(async (_tabId, changeInfo, tab) => {
-  if (changeInfo.status === 'complete' && tab.active) {
-    const state = getStateForTab(tab);
-    await applyStateConfig(state, tab);
+// Update icon when tab is activated (user switches tabs)
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  const tab = await chrome.tabs.get(activeInfo.tabId);
+  const state = await getStateForTab(tab);
+  await updateIcon(state);
+});
+
+// Update icon when navigation completes and reload if needed
+chrome.webNavigation.onCompleted.addListener(async (details) => {
+  if (details.frameId !== 0) return;
+
+  const tab = await chrome.tabs.get(details.tabId);
+  const state = await getStateForTab(tab);
+
+  if (tab.active) {
+    await updateIcon(state);
+  }
+
+  // Check if we need to reload to apply settings
+  const navKey = `${details.tabId}:${details.url}`;
+  const lastHandled = handledNavigations.get(navKey);
+  const now = Date.now();
+
+  // If state is not OFF and we haven't reloaded this exact navigation recently (within 5 seconds)
+  if (state !== STATES.OFF && (!lastHandled || now - lastHandled > 5000)) {
+    handledNavigations.set(navKey, now);
+    chrome.tabs.reload(details.tabId);
+  }
+
+  // Clean up old entries (older than 10 seconds)
+  for (const [key, timestamp] of handledNavigations) {
+    if (now - timestamp > 10000) {
+      handledNavigations.delete(key);
+    }
+  }
+});
+
+// Clear reload tracking when tab is closed
+chrome.tabs.onRemoved.addListener((tabId) => {
+  for (const key of handledNavigations.keys()) {
+    if (key.startsWith(`${tabId}:`)) {
+      handledNavigations.delete(key);
+    }
   }
 });
 
