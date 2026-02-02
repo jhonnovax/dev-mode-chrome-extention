@@ -1,426 +1,200 @@
-// Cookie configuration
-const COOKIE_CONFIG = {
-  name: 'htm-dev-mode',
-  value: '4815162342',
-  path: '/',
-  secure: true,
-  sameSite: 'no_restriction'
-};
-
-// Three states: dev, prod, off
-const STATES = {
-  DEV: 'dev',
-  PROD: 'prod',
-  OFF: 'off'
-};
-
-// State configurations
-const STATE_CONFIG = {
-  [STATES.DEV]: {
-    color: '#00C853',      // Green
-    label: 'DEV',
-    title: 'Development Mode',
-    cookie: true,          // Cookie is SET
-    proxy: 'system',
-    disableCache: true     // Cache disabled
-  },
-  [STATES.PROD]: {
-    color: '#D32F2F',      // Red
-    label: 'PRO',
-    title: 'Production Mode',
-    cookie: false,         // Cookie deleted
-    proxy: 'system',
-    disableCache: true     // Cache disabled
-  },
-  [STATES.OFF]: {
-    color: '#757575',      // Gray
-    label: 'OFF',
-    title: 'Off',
-    cookie: false,         // Cookie deleted
-    proxy: 'direct',
-    disableCache: false    // Cache enabled (normal)
-  }
-};
-
-// Rule ID for cache-disabling
+// Constants
+const COOKIE_NAME = 'htm-dev-mode';
+const COOKIE_VALUE = '4815162342';
 const CACHE_RULE_ID = 1;
+const STORAGE_KEY = 'domainStates';
 
-// Storage key for domain states
-const DOMAIN_STATES_KEY = 'domainStates';
+const STATES = { DEV: 'dev', PROD: 'prod', OFF: 'off' };
 
-// Track navigations we've already handled (tabId:url -> timestamp)
-const handledNavigations = new Map();
+const STATE_CONFIG = {
+  [STATES.DEV]:  { color: '#00C853', label: 'DEV', title: 'Development Mode', cookie: true,  proxy: 'system', cache: false },
+  [STATES.PROD]: { color: '#D32F2F', label: 'PRO', title: 'Production Mode',  cookie: false, proxy: 'system', cache: false },
+  [STATES.OFF]:  { color: '#757575', label: 'OFF', title: 'Off',              cookie: false, proxy: 'direct', cache: true }
+};
 
-/**
- * Generate an accessible badge icon using OffscreenCanvas
- * @param {string} color - The fill color for the badge
- * @param {string} label - The text label to display
- * @returns {ImageData} - The icon image data
- */
+// Generate badge icon
 function generateIcon(color, label) {
-  const size = 32;
-  const canvas = new OffscreenCanvas(size, size);
+  const canvas = new OffscreenCanvas(32, 32);
   const ctx = canvas.getContext('2d');
 
-  // Clear canvas
-  ctx.clearRect(0, 0, size, size);
-
-  // Draw rounded rectangle background
-  const radius = 4;
   ctx.beginPath();
-  ctx.roundRect(0, 0, size, size, radius);
+  ctx.roundRect(0, 0, 32, 32, 4);
   ctx.fillStyle = color;
   ctx.fill();
-
-  // Add subtle border for better visibility
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(0,0,0,0.2)';
   ctx.stroke();
 
-  // Draw text with shadow for better readability
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = 'bold 11px Arial, sans-serif';
+  ctx.fillStyle = '#FFF';
+  ctx.font = 'bold 11px Arial';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-
-  // Text shadow for accessibility
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+  ctx.shadowColor = 'rgba(0,0,0,0.4)';
   ctx.shadowBlur = 2;
-  ctx.shadowOffsetX = 0;
   ctx.shadowOffsetY = 1;
+  ctx.fillText(label, 16, 17);
 
-  ctx.fillText(label, size / 2, size / 2 + 1);
-
-  return ctx.getImageData(0, 0, size, size);
+  return ctx.getImageData(0, 0, 32, 32);
 }
 
-/**
- * Get all domain states from storage
- * @returns {Promise<Object>} - Object with domain -> state mappings
- */
-async function getDomainStates() {
-  const result = await chrome.storage.local.get(DOMAIN_STATES_KEY);
-  return result[DOMAIN_STATES_KEY] || {};
-}
-
-/**
- * Get the state for a domain from storage
- * @param {string} domain - The domain to get state for
- * @returns {Promise<string>} - The state or OFF if not set
- */
-async function getStateForDomain(domain) {
-  const states = await getDomainStates();
-  return states[domain] || STATES.OFF;
-}
-
-/**
- * Set the state for a domain in storage
- * @param {string} domain - The domain to set state for
- * @param {string} state - The state to set
- */
-async function setStateForDomain(domain, state) {
-  const states = await getDomainStates();
-  states[domain] = state;
-  await chrome.storage.local.set({ [DOMAIN_STATES_KEY]: states });
-}
-
-/**
- * Get the state for a tab based on its domain
- * @param {chrome.tabs.Tab} [tab] - The tab to get state for
- * @returns {Promise<string>} - The state or OFF if no valid domain
- */
-async function getStateForTab(tab) {
-  if (!tab?.url) return STATES.OFF;
-  const domain = extractDomain(tab.url);
-  if (!domain) return STATES.OFF;
-  return await getStateForDomain(domain);
-}
-
-/**
- * Set the extension icon based on state
- * @param {string} state - Current state
- */
-async function updateIcon(state) {
-  const config = STATE_CONFIG[state];
-  const imageData = generateIcon(config.color, config.label);
-
-  await chrome.action.setIcon({
-    imageData: { 32: imageData }
-  });
-
-  await chrome.action.setTitle({
-    title: config.title
-  });
-}
-
-/**
- * Extract the root domain from a URL (e.g., "https://www.example.com/path" -> ".example.com")
- * @param {string} url - The URL to extract domain from
- * @returns {string|null} - The root domain with leading dot, or null if invalid
- */
+// Extract root domain from URL
 function extractDomain(url) {
   try {
-    const hostname = new URL(url).hostname;
-    const parts = hostname.split('.');
-    if (parts.length >= 2) {
-      // Get root domain (last two parts, e.g., "example.com")
-      return '.' + parts.slice(-2).join('.');
-    }
-    return '.' + hostname;
+    const parts = new URL(url).hostname.split('.');
+    return '.' + parts.slice(-2).join('.');
   } catch {
     return null;
   }
 }
 
-/**
- * Set the dev mode cookie for the given domain
- * @param {string} domain - The domain to set the cookie on (e.g., ".example.com")
- * @param {string} url - The URL to use for setting the cookie
- */
-async function setCookie(domain, url) {
-  const oneYearFromNow = Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60);
-
-  await chrome.cookies.set({
-    url: url,
-    name: COOKIE_CONFIG.name,
-    value: COOKIE_CONFIG.value,
-    domain: domain,
-    path: COOKIE_CONFIG.path,
-    secure: COOKIE_CONFIG.secure,
-    sameSite: COOKIE_CONFIG.sameSite,
-    expirationDate: oneYearFromNow
-  });
+// Get state for a domain
+async function getState(domain) {
+  const { [STORAGE_KEY]: states = {} } = await chrome.storage.local.get(STORAGE_KEY);
+  return states[domain] || STATES.OFF;
 }
 
-/**
- * Remove the dev mode cookie for the given domain
- * @param {string} url - The URL to use for removing the cookie
- */
-async function removeCookie(url) {
-  await chrome.cookies.remove({
-    url: url,
-    name: COOKIE_CONFIG.name
-  });
+// Save state for a domain
+async function saveState(domain, state) {
+  const { [STORAGE_KEY]: states = {} } = await chrome.storage.local.get(STORAGE_KEY);
+  states[domain] = state;
+  await chrome.storage.local.set({ [STORAGE_KEY]: states });
 }
 
-/**
- * Set proxy mode
- * @param {string} mode - 'system' or 'direct'
- */
-async function setProxy(mode) {
-  await chrome.proxy.settings.set({
-    value: { mode },
-    scope: 'regular'
-  });
+// Update extension icon
+function updateIcon(state) {
+  const { color, label, title } = STATE_CONFIG[state];
+  chrome.action.setIcon({ imageData: { 32: generateIcon(color, label) } });
+  chrome.action.setTitle({ title });
 }
 
-/**
- * Enable cache bypass by adding request headers
- */
-async function enableCacheBypass() {
-  const rule = {
-    id: CACHE_RULE_ID,
-    priority: 1,
-    action: {
-      type: 'modifyHeaders',
-      requestHeaders: [
-        { header: 'Cache-Control', operation: 'set', value: 'no-cache, no-store, must-revalidate' },
-        { header: 'Pragma', operation: 'set', value: 'no-cache' }
-      ]
-    },
-    condition: {
-      urlFilter: '*',
-      resourceTypes: ['main_frame', 'sub_frame', 'stylesheet', 'script', 'image', 'font', 'xmlhttprequest', 'other']
-    }
-  };
-
-  await chrome.declarativeNetRequest.updateDynamicRules({
-    removeRuleIds: [CACHE_RULE_ID],
-    addRules: [rule]
-  });
-}
-
-/**
- * Disable cache bypass by removing the rule
- */
-async function disableCacheBypass() {
-  await chrome.declarativeNetRequest.updateDynamicRules({
-    removeRuleIds: [CACHE_RULE_ID]
-  });
-}
-
-/**
- * Apply the configuration for a given state
- * @param {string} state - State to apply
- * @param {chrome.tabs.Tab} [tab] - Optional tab to use for cookie domain
- */
-async function applyStateConfig(state, tab) {
+// Apply state configuration (cookie, proxy, cache)
+async function applyConfig(state, url) {
   const config = STATE_CONFIG[state];
+  const domain = url ? extractDomain(url) : null;
 
-  // Handle cookie based on the current tab's domain
-  if (tab && tab.url) {
-    const domain = extractDomain(tab.url);
-    if (domain) {
-      if (config.cookie) {
-        await setCookie(domain, tab.url);
-      } else {
-        await removeCookie(tab.url);
-      }
+  // Cookie
+  if (domain) {
+    if (config.cookie) {
+      await chrome.cookies.set({
+        url, domain,
+        name: COOKIE_NAME,
+        value: COOKIE_VALUE,
+        path: '/',
+        secure: true,
+        sameSite: 'no_restriction',
+        expirationDate: Math.floor(Date.now() / 1000) + 31536000
+      });
+    } else {
+      await chrome.cookies.remove({ url, name: COOKIE_NAME }).catch(() => {});
     }
   }
 
-  // Handle proxy
-  await setProxy(config.proxy);
+  // Proxy
+  await chrome.proxy.settings.set({ value: { mode: config.proxy }, scope: 'regular' });
 
-  // Handle cache
-  if (config.disableCache) {
-    await enableCacheBypass();
+  // Cache
+  if (config.cache) {
+    await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds: [CACHE_RULE_ID] });
   } else {
-    await disableCacheBypass();
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      removeRuleIds: [CACHE_RULE_ID],
+      addRules: [{
+        id: CACHE_RULE_ID,
+        priority: 1,
+        action: {
+          type: 'modifyHeaders',
+          requestHeaders: [
+            { header: 'Cache-Control', operation: 'set', value: 'no-cache, no-store, must-revalidate' },
+            { header: 'Pragma', operation: 'set', value: 'no-cache' }
+          ]
+        },
+        condition: {
+          urlFilter: '*',
+          resourceTypes: ['main_frame', 'sub_frame', 'stylesheet', 'script', 'image', 'font', 'xmlhttprequest', 'other']
+        }
+      }]
+    });
   }
-
-  // Update icon
-  await updateIcon(state);
 }
 
-/**
- * Initialize extension - just update icon for current tab
- */
-async function initialize() {
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  const state = await getStateForTab(activeTab);
-  await updateIcon(state);
+// Get active tab's state and update icon
+async function updateIconForActiveTab() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const domain = tab?.url ? extractDomain(tab.url) : null;
+  const state = domain ? await getState(domain) : STATES.OFF;
+  updateIcon(state);
 }
 
-/**
- * Handle state change request from popup
- * @param {string} newState - The state to switch to
- */
+// Handle state change from popup
 async function setState(newState) {
   if (!STATE_CONFIG[newState]) return;
 
-  // Get the current active tab for cookie domain
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const domain = tab?.url ? extractDomain(tab.url) : null;
 
-  if (activeTab?.url) {
-    const domain = extractDomain(activeTab.url);
-    if (domain) {
-      // Save state for this domain
-      await setStateForDomain(domain, newState);
-    }
-
-    // Mark this navigation as handled so onCompleted doesn't reload again
-    const navKey = `${activeTab.id}:${activeTab.url}`;
-    handledNavigations.set(navKey, Date.now());
-  }
-
-  await applyStateConfig(newState, activeTab);
-
-  // Reload the active tab after state change
-  if (activeTab) {
-    chrome.tabs.reload(activeTab.id);
+  if (domain) {
+    await saveState(domain, newState);
+    await applyConfig(newState, tab.url);
+    updateIcon(newState);
+    chrome.tabs.reload(tab.id);
   }
 }
 
-// Event Listeners
-
-// Handle messages from popup
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message.action === 'setState') {
-    setState(message.state).then(() => sendResponse({ success: true }));
-    return true; // Keep channel open for async response
+// Message handler
+chrome.runtime.onMessage.addListener((msg, _, respond) => {
+  if (msg.action === 'setState') {
+    setState(msg.state).then(() => respond({ success: true }));
+    return true;
   }
-  if (message.action === 'getState') {
-    chrome.tabs.query({ active: true, currentWindow: true }).then(async ([activeTab]) => {
-      const state = await getStateForTab(activeTab);
-      sendResponse({ state });
+  if (msg.action === 'getState') {
+    chrome.tabs.query({ active: true, currentWindow: true }).then(async ([tab]) => {
+      const domain = tab?.url ? extractDomain(tab.url) : null;
+      respond({ state: domain ? await getState(domain) : STATES.OFF });
     });
-    return true; // Keep channel open for async response
+    return true;
   }
 });
 
-// Apply config BEFORE navigation starts
-chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
-  // Only handle main frame navigations
-  if (details.frameId !== 0) return;
+// Apply config at multiple points to ensure it's set before request goes out
 
+// 1. Before navigation starts (earliest possible)
+chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
+  if (details.frameId !== 0) return;
   const domain = extractDomain(details.url);
   if (!domain) return;
 
-  const state = await getStateForDomain(domain);
-  const config = STATE_CONFIG[state];
-
-  // Apply cookie
-  if (config.cookie) {
-    await setCookie(domain, details.url);
-  } else {
-    try {
-      await removeCookie(details.url);
-    } catch {
-      // Cookie may not exist
-    }
-  }
-
-  // Apply proxy and cache
-  await setProxy(config.proxy);
-  if (config.disableCache) {
-    await enableCacheBypass();
-  } else {
-    await disableCacheBypass();
-  }
+  const state = await getState(domain);
+  await applyConfig(state, details.url);
 });
 
-// Update icon when tab is activated (user switches tabs)
-chrome.tabs.onActivated.addListener(async (activeInfo) => {
-  const tab = await chrome.tabs.get(activeInfo.tabId);
-  const state = await getStateForTab(tab);
-  await updateIcon(state);
+// 2. When tab URL changes (catches new tabs)
+chrome.tabs.onUpdated.addListener(async (_tabId, changeInfo, tab) => {
+  if (!changeInfo.url) return;
+  const domain = extractDomain(changeInfo.url);
+  if (!domain) return;
+
+  const state = await getState(domain);
+  await applyConfig(state, changeInfo.url);
+
+  if (tab.active) updateIcon(state);
 });
 
-// Update icon when navigation completes and reload if needed
-chrome.webNavigation.onCompleted.addListener(async (details) => {
+// 3. When navigation commits (ensures config is applied)
+chrome.webNavigation.onCommitted.addListener(async (details) => {
   if (details.frameId !== 0) return;
+  const domain = extractDomain(details.url);
+  if (!domain) return;
 
-  const tab = await chrome.tabs.get(details.tabId);
-  const state = await getStateForTab(tab);
+  const state = await getState(domain);
+  await applyConfig(state, details.url);
 
-  if (tab.active) {
-    await updateIcon(state);
-  }
-
-  // Check if we need to reload to apply settings
-  const navKey = `${details.tabId}:${details.url}`;
-  const lastHandled = handledNavigations.get(navKey);
-  const now = Date.now();
-
-  // If state is not OFF and we haven't reloaded this exact navigation recently (within 5 seconds)
-  if (state !== STATES.OFF && (!lastHandled || now - lastHandled > 5000)) {
-    handledNavigations.set(navKey, now);
-    chrome.tabs.reload(details.tabId);
-  }
-
-  // Clean up old entries (older than 10 seconds)
-  for (const [key, timestamp] of handledNavigations) {
-    if (now - timestamp > 10000) {
-      handledNavigations.delete(key);
-    }
-  }
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (activeTab?.id === details.tabId) updateIcon(state);
 });
 
-// Clear reload tracking when tab is closed
-chrome.tabs.onRemoved.addListener((tabId) => {
-  for (const key of handledNavigations.keys()) {
-    if (key.startsWith(`${tabId}:`)) {
-      handledNavigations.delete(key);
-    }
-  }
-});
+// Update icon when switching tabs
+chrome.tabs.onActivated.addListener(() => updateIconForActiveTab());
 
-// Initialize on install or update
-chrome.runtime.onInstalled.addListener(initialize);
-
-// Initialize on browser startup
-chrome.runtime.onStartup.addListener(initialize);
-
-// Also initialize immediately when service worker starts
-initialize();
+// Initialize
+chrome.runtime.onInstalled.addListener(updateIconForActiveTab);
+chrome.runtime.onStartup.addListener(updateIconForActiveTab);
+updateIconForActiveTab();
