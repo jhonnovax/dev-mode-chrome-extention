@@ -9,7 +9,7 @@ const STATES = { DEV: 'dev', PROD: 'prod', OFF: 'off' };
 const STATE_CONFIG = {
   [STATES.DEV]:  { color: '#00C853', label: 'DEV', title: 'Development Mode', cookie: true,  proxy: 'system', cache: false },
   [STATES.PROD]: { color: '#D32F2F', label: 'PRO', title: 'Production Mode',  cookie: false, proxy: 'system', cache: false },
-  [STATES.OFF]:  { color: '#757575', label: 'OFF', title: 'Off',              cookie: false, proxy: 'direct', cache: true }
+  [STATES.OFF]:  { color: '#757575', label: 'OFF', title: 'Off',              cookie: false, proxy: null,     cache: true }
 };
 
 // Generate badge icon
@@ -89,7 +89,11 @@ async function applyConfig(state, url) {
   }
 
   // Proxy
-  await chrome.proxy.settings.set({ value: { mode: config.proxy }, scope: 'regular' });
+  if (config.proxy) {
+    await chrome.proxy.settings.set({ value: { mode: config.proxy }, scope: 'regular' });
+  } else {
+    await chrome.proxy.settings.clear({ scope: 'regular' });
+  }
 
   // Cache
   if (config.cache) {
