@@ -3,13 +3,15 @@ const COOKIE_NAME = 'htm-dev-mode';
 const COOKIE_VALUE = '4815162342';
 const CACHE_RULE_ID = 1;
 const STORAGE_KEY = 'domainStates';
+const PROXY_HOST = '127.0.0.1';
+const PROXY_PORT = 8888;
 
 const STATES = { DEV: 'dev', PROD: 'prod', OFF: 'off' };
 
 const STATE_CONFIG = {
-  [STATES.DEV]:  { color: '#00C853', label: 'DEV', title: 'Development Mode', cookie: true,  proxy: 'system', cache: false },
-  [STATES.PROD]: { color: '#D32F2F', label: 'PRO', title: 'Production Mode',  cookie: false, proxy: 'system', cache: false },
-  [STATES.OFF]:  { color: '#757575', label: 'OFF', title: 'Off',              cookie: false, proxy: null,     cache: true }
+  [STATES.DEV]:  { color: '#00C853', label: 'DEV', title: 'Development Mode', cookie: true,  proxy: true,  cache: false },
+  [STATES.PROD]: { color: '#D32F2F', label: 'PRO', title: 'Production Mode',  cookie: false, proxy: true,  cache: false },
+  [STATES.OFF]:  { color: '#757575', label: 'OFF', title: 'Off',              cookie: false, proxy: false, cache: true }
 };
 
 // Generate badge icon
@@ -90,7 +92,13 @@ async function applyConfig(state, url) {
 
   // Proxy
   if (config.proxy) {
-    await chrome.proxy.settings.set({ value: { mode: config.proxy }, scope: 'regular' });
+    await chrome.proxy.settings.set({
+      value: {
+        mode: 'fixed_servers',
+        rules: { singleProxy: { host: PROXY_HOST, port: PROXY_PORT } }
+      },
+      scope: 'regular'
+    });
   } else {
     await chrome.proxy.settings.clear({ scope: 'regular' });
   }
