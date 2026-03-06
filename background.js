@@ -100,7 +100,7 @@ async function applyConfig(state, url) {
       scope: 'regular'
     });
   } else {
-    await chrome.proxy.settings.clear({ scope: 'regular' });
+    await chrome.proxy.settings.set({ value: { mode: 'direct' }, scope: 'regular' });
   }
 
   // Cache
