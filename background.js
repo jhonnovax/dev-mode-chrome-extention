@@ -9,33 +9,64 @@ const PROXY_PORT = 8888;
 const STATES = { DEV: 'dev', PROD: 'prod', OFF: 'off' };
 
 const STATE_CONFIG = {
-  [STATES.DEV]:  { color: '#00C853', label: 'DEV', title: 'Development Mode', cookie: true,  proxy: true,  cache: false },
-  [STATES.PROD]: { color: '#D32F2F', label: 'PRO', title: 'Production Mode',  cookie: false, proxy: true,  cache: false },
-  [STATES.OFF]:  { color: '#757575', label: 'OFF', title: 'Off',              cookie: false, proxy: false, cache: true }
+  [STATES.DEV]:  { color: '#22C55E', label: 'DEV', title: 'Development Mode', cookie: true,  proxy: true,  cache: false },
+  [STATES.PROD]: { color: '#EF4444', label: 'PRO', title: 'Production Mode',  cookie: false, proxy: true,  cache: false },
+  [STATES.OFF]:  { color: '#94A3B8', label: 'OFF', title: 'Off',              cookie: false, proxy: false, cache: true }
 };
 
-// Generate badge icon
-function generateIcon(color, label) {
-  const canvas = new OffscreenCanvas(32, 32);
+// Generate a single icon ImageData at the given pixel size
+function generateIconSize(state, size) {
+  const canvas = new OffscreenCanvas(size, size);
   const ctx = canvas.getContext('2d');
+  const { color } = STATE_CONFIG[state];
+  const cx = size / 2;
+  const cy = size / 2;
 
+  // Flat background
   ctx.beginPath();
-  ctx.roundRect(0, 0, 32, 32, 4);
+  ctx.roundRect(0, 0, size, size, size * 0.26);
   ctx.fillStyle = color;
   ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+
+  // </> symbol
+  ctx.strokeStyle = 'rgba(255,255,255,0.92)';
+  ctx.lineCap     = 'round';
+  ctx.lineJoin    = 'round';
+  const lw = Math.max(1.2, size * 0.092);
+  const h  = size * 0.21;
+  ctx.lineWidth = lw;
+
+  // <
+  ctx.beginPath();
+  ctx.moveTo(cx - size * 0.13, cy - h);
+  ctx.lineTo(cx - size * 0.29, cy);
+  ctx.lineTo(cx - size * 0.13, cy + h);
   ctx.stroke();
 
-  ctx.fillStyle = '#FFF';
-  ctx.font = 'bold 11px Arial';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.shadowColor = 'rgba(0,0,0,0.4)';
-  ctx.shadowBlur = 2;
-  ctx.shadowOffsetY = 1;
-  ctx.fillText(label, 16, 17);
+  // >
+  ctx.beginPath();
+  ctx.moveTo(cx + size * 0.13, cy - h);
+  ctx.lineTo(cx + size * 0.29, cy);
+  ctx.lineTo(cx + size * 0.13, cy + h);
+  ctx.stroke();
 
-  return ctx.getImageData(0, 0, 32, 32);
+  // /
+  ctx.lineWidth = lw * 0.78;
+  ctx.beginPath();
+  ctx.moveTo(cx + size * 0.052, cy - h * 0.87);
+  ctx.lineTo(cx - size * 0.052, cy + h * 0.87);
+  ctx.stroke();
+
+  return ctx.getImageData(0, 0, size, size);
+}
+
+// Generate icons at all required sizes
+function generateIcons(state) {
+  return {
+    16:  generateIconSize(state, 16),
+    32:  generateIconSize(state, 32),
+    128: generateIconSize(state, 128)
+  };
 }
 
 // Extract root domain from URL
@@ -63,8 +94,8 @@ async function saveState(domain, state) {
 
 // Update extension icon
 function updateIcon(state) {
-  const { color, label, title } = STATE_CONFIG[state];
-  chrome.action.setIcon({ imageData: { 32: generateIcon(color, label) } });
+  const { title } = STATE_CONFIG[state];
+  chrome.action.setIcon({ imageData: generateIcons(state) });
   chrome.action.setTitle({ title });
 }
 
