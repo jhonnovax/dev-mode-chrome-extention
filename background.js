@@ -69,6 +69,11 @@ function generateIcons(state) {
   };
 }
 
+// Returns true only for URLs the extension can operate on
+function isActionableUrl(url) {
+  return typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'));
+}
+
 // Extract root domain from URL
 function extractDomain(url) {
   try {
@@ -162,8 +167,16 @@ async function applyConfig(state, url) {
 // Get active tab's state and update icon
 async function updateIconForActiveTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  const domain = tab?.url ? extractDomain(tab.url) : null;
-  const state = domain ? await getState(domain) : STATES.OFF;
+  if (!tab) return;
+
+  if (!isActionableUrl(tab.url)) {
+    chrome.action.disable(tab.id);
+    return;
+  }
+
+  chrome.action.enable(tab.id);
+  const domain = extractDomain(tab.url);
+  const state  = domain ? await getState(domain) : STATES.OFF;
   updateIcon(state);
 }
 
@@ -172,7 +185,9 @@ async function setState(newState) {
   if (!STATE_CONFIG[newState]) return;
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  const domain = tab?.url ? extractDomain(tab.url) : null;
+  if (!isActionableUrl(tab?.url)) return;
+
+  const domain = extractDomain(tab.url);
 
   if (domain) {
     await saveState(domain, newState);
@@ -212,6 +227,13 @@ chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
 // 2. When tab URL changes (catches new tabs)
 chrome.tabs.onUpdated.addListener(async (_tabId, changeInfo, tab) => {
   if (!changeInfo.url) return;
+
+  if (!isActionableUrl(changeInfo.url)) {
+    chrome.action.disable(_tabId);
+    return;
+  }
+
+  chrome.action.enable(_tabId);
   const domain = extractDomain(changeInfo.url);
   if (!domain) return;
 
