@@ -44,7 +44,7 @@ No build step required. This is a plain JavaScript extension.
 | State | Icon | Label | Cookie | Proxy | Cache |
 |-------|------|-------|--------|-------|-------|
 | DEV   | Green (#00C853) | DEV | SET (`htm-dev-mode=4815162342`) | system | disabled |
-| PROD  | Red (#D32F2F) | PRO | deleted | system | disabled |
+| TESTING | Red (#D32F2F) | QA | deleted | system | disabled |
 | OFF   | Gray (#757575) | OFF | deleted | direct | enabled |
 
 **UI Features:**

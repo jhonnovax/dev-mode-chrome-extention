@@ -6,12 +6,12 @@ const STORAGE_KEY = 'domainStates';
 const PROXY_HOST = '127.0.0.1';
 const PROXY_PORT = 8888;
 
-const STATES = { DEV: 'dev', PROD: 'prod', OFF: 'off' };
+const STATES = { DEV: 'dev', TESTING: 'testing', OFF: 'off' };
 
 const STATE_CONFIG = {
-  [STATES.DEV]:  { color: '#22C55E', label: 'DEV', title: 'Development Mode', cookie: true,  proxy: true,  cache: false },
-  [STATES.PROD]: { color: '#EF4444', label: 'PRO', title: 'Production Mode',  cookie: false, proxy: true,  cache: false },
-  [STATES.OFF]:  { color: '#94A3B8', label: 'OFF', title: 'Off',              cookie: false, proxy: false, cache: true }
+  [STATES.DEV]:     { color: '#22C55E', label: 'DEV', title: 'Development Mode', cookie: true,  proxy: true,  cache: false },
+  [STATES.TESTING]: { color: '#EF4444', label: 'QA',  title: 'Testing Mode',     cookie: false, proxy: true,  cache: false },
+  [STATES.OFF]:     { color: '#94A3B8', label: 'OFF', title: 'Off',              cookie: false, proxy: false, cache: true }
 };
 
 // Generate a single icon ImageData at the given pixel size

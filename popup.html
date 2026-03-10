@@ -80,11 +80,11 @@
     }
 
     .menu-item.dev .indicator { background: #00C853; }
-    .menu-item.prod .indicator { background: #D32F2F; }
+    .menu-item.testing .indicator { background: #D32F2F; }
     .menu-item.off .indicator { background: #9e9e9e; }
 
     .menu-item.dev.active .indicator { box-shadow: 0 0 6px #00C853; }
-    .menu-item.prod.active .indicator { box-shadow: 0 0 6px #D32F2F; }
+    .menu-item.testing.active .indicator { box-shadow: 0 0 6px #D32F2F; }
     .menu-item.off.active .indicator { box-shadow: 0 0 6px #9e9e9e; }
 
     .menu-item:not(.active) .indicator {
@@ -111,7 +111,7 @@
       color: #00a344;
     }
 
-    .menu-item.prod .badge {
+    .menu-item.testing .badge {
       background: rgba(211, 47, 47, 0.15);
       color: #c62828;
     }
@@ -127,7 +127,7 @@
         color: #69f0ae;
       }
 
-      .menu-item.prod .badge {
+      .menu-item.testing .badge {
         background: rgba(211, 47, 47, 0.2);
         color: #ef9a9a;
       }
@@ -191,10 +191,10 @@
       <span class="label">Development</span>
       <span class="badge">DEV</span>
     </div>
-    <div class="menu-item prod" data-state="prod">
+    <div class="menu-item testing" data-state="testing">
       <span class="indicator"></span>
-      <span class="label">Production</span>
-      <span class="badge">PRO</span>
+      <span class="label">Testing</span>
+      <span class="badge">QA</span>
     </div>
   </div>
   <script src="popup.js"></script>
