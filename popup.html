@@ -80,11 +80,13 @@
     }
 
     .menu-item.dev .indicator { background: #00C853; }
-    .menu-item.testing .indicator { background: #D32F2F; }
+    .menu-item.preview .indicator { background: #EAB308; }
+    .menu-item.prod .indicator { background: #D32F2F; }
     .menu-item.off .indicator { background: #9e9e9e; }
 
     .menu-item.dev.active .indicator { box-shadow: 0 0 6px #00C853; }
-    .menu-item.testing.active .indicator { box-shadow: 0 0 6px #D32F2F; }
+    .menu-item.preview.active .indicator { box-shadow: 0 0 6px #EAB308; }
+    .menu-item.prod.active .indicator { box-shadow: 0 0 6px #D32F2F; }
     .menu-item.off.active .indicator { box-shadow: 0 0 6px #9e9e9e; }
 
     .menu-item:not(.active) .indicator {
@@ -111,7 +113,12 @@
       color: #00a344;
     }
 
-    .menu-item.testing .badge {
+    .menu-item.preview .badge {
+      background: rgba(234, 179, 8, 0.18);
+      color: #a16207;
+    }
+
+    .menu-item.prod .badge {
       background: rgba(211, 47, 47, 0.15);
       color: #c62828;
     }
@@ -127,7 +134,12 @@
         color: #69f0ae;
       }
 
-      .menu-item.testing .badge {
+      .menu-item.preview .badge {
+        background: rgba(234, 179, 8, 0.24);
+        color: #facc15;
+      }
+
+      .menu-item.prod .badge {
         background: rgba(211, 47, 47, 0.2);
         color: #ef9a9a;
       }
@@ -148,6 +160,7 @@
     .menu-item:nth-child(1) { animation-delay: 0s; }
     .menu-item:nth-child(2) { animation-delay: 0.03s; }
     .menu-item:nth-child(3) { animation-delay: 0.06s; }
+    .menu-item:nth-child(4) { animation-delay: 0.09s; }
 
     @keyframes slideIn {
       to {
@@ -191,10 +204,15 @@
       <span class="label">Development</span>
       <span class="badge">DEV</span>
     </div>
-    <div class="menu-item testing" data-state="testing">
+    <div class="menu-item preview" data-state="preview">
       <span class="indicator"></span>
-      <span class="label">Testing</span>
-      <span class="badge">QA</span>
+      <span class="label">Preview</span>
+      <span class="badge">PRE</span>
+    </div>
+    <div class="menu-item prod" data-state="prod">
+      <span class="indicator"></span>
+      <span class="label">Production</span>
+      <span class="badge">PRO</span>
     </div>
   </div>
   <script src="popup.js"></script>

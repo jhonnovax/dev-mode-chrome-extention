@@ -6,13 +6,21 @@ const STORAGE_KEY = 'domainStates';
 const PROXY_HOST = '127.0.0.1';
 const PROXY_PORT = 8888;
 
-const STATES = { DEV: 'dev', TESTING: 'testing', OFF: 'off' };
+const PROXY_MODES = { SYSTEM: 'system', FIXED: 'fixed', DIRECT: 'direct' };
+const STATES = { OFF: 'off', DEV: 'dev', PREVIEW: 'preview', PROD: 'prod' };
+const LEGACY_STATE_MAP = { testing: STATES.OFF, prod_local: STATES.PREVIEW };
 
 const STATE_CONFIG = {
-  [STATES.DEV]:     { color: '#22C55E', label: 'DEV', title: 'Development Mode', cookie: true,  proxy: true,  cache: false },
-  [STATES.TESTING]: { color: '#EF4444', label: 'QA',  title: 'Testing Mode',     cookie: false, proxy: true,  cache: false },
-  [STATES.OFF]:     { color: '#94A3B8', label: 'OFF', title: 'Off',              cookie: false, proxy: false, cache: true }
+  [STATES.OFF]:        { color: '#94A3B8', label: 'OFF',   title: 'Off',              cookie: false, proxy: PROXY_MODES.SYSTEM, cache: true },
+  [STATES.DEV]:        { color: '#22C55E', label: 'DEV',   title: 'Development Mode', cookie: true,  proxy: PROXY_MODES.FIXED,  cache: false },
+  [STATES.PREVIEW]:    { color: '#EAB308', label: 'PREV',  title: 'Preview Mode',     cookie: false, proxy: PROXY_MODES.FIXED,  cache: false },
+  [STATES.PROD]:       { color: '#EF4444', label: 'PROD',  title: 'Production Mode',  cookie: false, proxy: PROXY_MODES.DIRECT, cache: false }
 };
+
+function normalizeState(state) {
+  const migratedState = LEGACY_STATE_MAP[state] || state;
+  return STATE_CONFIG[migratedState] ? migratedState : STATES.OFF;
+}
 
 // Generate a single icon ImageData at the given pixel size
 function generateIconSize(state, size) {
@@ -87,13 +95,13 @@ function extractDomain(url) {
 // Get state for a domain
 async function getState(domain) {
   const { [STORAGE_KEY]: states = {} } = await chrome.storage.local.get(STORAGE_KEY);
-  return states[domain] || STATES.OFF;
+  return normalizeState(states[domain]);
 }
 
 // Save state for a domain
 async function saveState(domain, state) {
   const { [STORAGE_KEY]: states = {} } = await chrome.storage.local.get(STORAGE_KEY);
-  states[domain] = state;
+  states[domain] = normalizeState(state);
   await chrome.storage.local.set({ [STORAGE_KEY]: states });
 }
 
@@ -106,7 +114,8 @@ function updateIcon(state) {
 
 // Apply state configuration (cookie, proxy, cache)
 async function applyConfig(state, url) {
-  const config = STATE_CONFIG[state];
+  const normalizedState = normalizeState(state);
+  const config = STATE_CONFIG[normalizedState];
   const domain = url ? extractDomain(url) : null;
 
   // Cookie
@@ -127,7 +136,7 @@ async function applyConfig(state, url) {
   }
 
   // Proxy
-  if (config.proxy) {
+  if (config.proxy === PROXY_MODES.FIXED) {
     await chrome.proxy.settings.set({
       value: {
         mode: 'fixed_servers',
@@ -135,6 +144,8 @@ async function applyConfig(state, url) {
       },
       scope: 'regular'
     });
+  } else if (config.proxy === PROXY_MODES.SYSTEM) {
+    await chrome.proxy.settings.set({ value: { mode: 'system' }, scope: 'regular' });
   } else {
     await chrome.proxy.settings.set({ value: { mode: 'direct' }, scope: 'regular' });
   }
@@ -182,7 +193,8 @@ async function updateIconForActiveTab() {
 
 // Handle state change from popup
 async function setState(newState) {
-  if (!STATE_CONFIG[newState]) return;
+  const normalizedState = normalizeState(newState);
+  if (!STATE_CONFIG[normalizedState]) return;
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!isActionableUrl(tab?.url)) return;
@@ -190,9 +202,9 @@ async function setState(newState) {
   const domain = extractDomain(tab.url);
 
   if (domain) {
-    await saveState(domain, newState);
-    await applyConfig(newState, tab.url);
-    updateIcon(newState);
+    await saveState(domain, normalizedState);
+    await applyConfig(normalizedState, tab.url);
+    updateIcon(normalizedState);
     chrome.tabs.reload(tab.id);
   }
 }

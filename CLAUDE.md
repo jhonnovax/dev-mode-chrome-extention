@@ -19,14 +19,14 @@ No build step required. This is a plain JavaScript extension.
 ## Architecture
 
 **background.js** - Service worker containing extension logic:
-- Manages three states: DEV, PROD, OFF
+- Manages four states: OFF, DEV, PREVIEW, PROD
 - Sets/removes cookie `htm-dev-mode=4815162342` on `.on24.com`
 - Switches proxy between system and direct modes
 - Generates dynamic badge icons using OffscreenCanvas
 - Auto-reloads tabs on matching domains when state changes
 
 **popup.html / popup.js** - Dropdown menu UI:
-- Styled dark theme dropdown with three options
+- Styled dark theme dropdown with four options
 - Animated entry and click ripple effects
 - Communicates with background.js via chrome.runtime.sendMessage
 
@@ -36,16 +36,17 @@ No build step required. This is a plain JavaScript extension.
 
 ## Key Implementation Details
 
-- Click icon to open dropdown menu with three options
+- Click icon to open dropdown menu with four options
 - State is persisted in chrome.storage.local
 - Extension initializes on install, startup, and immediately to ensure state persistence
 
 **States:**
 | State | Icon | Label | Cookie | Proxy | Cache |
 |-------|------|-------|--------|-------|-------|
-| DEV   | Green (#00C853) | DEV | SET (`htm-dev-mode=4815162342`) | system | disabled |
-| TESTING | Red (#D32F2F) | QA | deleted | system | disabled |
-| OFF   | Gray (#757575) | OFF | deleted | direct | enabled |
+| OFF | Gray (#757575) | OFF | deleted | system | enabled |
+| DEV | Green (#00C853) | DEV | SET (`htm-dev-mode=4815162342`) | fixed (`127.0.0.1:8888`) | disabled |
+| PREVIEW | Yellow (#EAB308) | PREV | deleted | fixed (`127.0.0.1:8888`) | disabled |
+| PROD | Red (#D32F2F) | PROD | deleted | direct | disabled |
 
 **UI Features:**
 - Dark theme popup with animated menu items
