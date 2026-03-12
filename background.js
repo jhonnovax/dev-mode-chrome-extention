@@ -144,10 +144,11 @@ async function applyConfig(state, url) {
       },
       scope: 'regular'
     });
-  } else if (config.proxy === PROXY_MODES.SYSTEM) {
-    await chrome.proxy.settings.set({ value: { mode: 'system' }, scope: 'regular' });
-  } else {
+  } else if (config.proxy === PROXY_MODES.DIRECT) {
     await chrome.proxy.settings.set({ value: { mode: 'direct' }, scope: 'regular' });
+  } else {
+    // Condition OFF - Clear proxy settings
+    await chrome.proxy.settings.clear({ scope: 'regular' });
   }
 
   // Cache
